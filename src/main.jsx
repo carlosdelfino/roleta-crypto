@@ -28,21 +28,48 @@ function renderWheel() {
   wheel.innerHTML = markup;
   $('range-label').textContent = `Entre ${format(range.lo / range.scale)} e ${format(range.hi / range.scale)}, incluindo os extremos`;
 }
-async function updateQR() {
+function drawQR(link) {
+  const { size, data } = QRCode.create(link, { errorCorrectionLevel: 'M' }).modules;
+  const cover = 0.9, clip = 0.7071 - 0.5 / cover;
+  const margin = Math.max(4, Math.ceil(clip * size / (1 - 2 * clip)));
+  const total = size + margin * 2, px = 360, s = px / total;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = px;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, px, px);
+  const cell = i => (margin + i) * s;
+  const finder = (r, c) => (r < 7 && c < 7) || (r < 7 && c >= size - 7) || (r >= size - 7 && c < 7);
+  const dot = (r, c) => r >= 0 && c >= 0 && r < size && c < size && data[r * size + c] && !finder(r, c);
+  const round = (x, y, w, h, r) => { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); };
+  ctx.fillStyle = '#000';
+  for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) {
+    if (!dot(r, c)) continue;
+    const x = cell(c), y = cell(r);
+    ctx.beginPath(); ctx.arc(x + s / 2, y + s / 2, s / 2, 0, Math.PI * 2); ctx.fill();
+    if (dot(r, c + 1)) ctx.fillRect(x + s / 2, y, s, s);
+    if (dot(r + 1, c)) ctx.fillRect(x, y + s / 2, s, s);
+  }
+  for (const [r0, c0] of [[0, 0], [0, size - 7], [size - 7, 0]]) {
+    const x = cell(c0), y = cell(r0);
+    round(x, y, 7 * s, 7 * s, 2.2 * s); ctx.fill();
+    ctx.fillStyle = '#fff'; round(x + s, y + s, 5 * s, 5 * s, 1.5 * s); ctx.fill();
+    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(x + 3.5 * s, y + 3.5 * s, 1.5 * s, 0, Math.PI * 2); ctx.fill();
+  }
+  return canvas;
+}
+function updateQR() {
   const version = ++qrVersion;
   $('qr').hidden = true;
   try {
-    const link = getLink($('link').value.trim());
-    const canvas = document.createElement('canvas');
-    await QRCode.toCanvas(canvas, link, { width: 320, margin: 4, errorCorrectionLevel: 'M', color: { dark: '#000000', light: '#ffffff' } });
+    const canvas = drawQR(getLink($('link').value.trim()));
     if (version !== qrVersion) return;
     $('qr').width = canvas.width; $('qr').height = canvas.height;
     $('qr').getContext('2d').drawImage(canvas, 0, 0); $('qr').hidden = false;
-    $('qr-caption').textContent = 'ESCANEIE O QR CODE'; $('error').textContent = '';
-  } catch { if (version === qrVersion) { $('qr-caption').textContent = 'INFORME UM LINK VÁLIDO'; $('error').textContent = 'Informe um link http:// ou https:// válido. Links muito extensos devem ser encurtados.'; } }
+    $('error').textContent = '';
+  } catch { if (version === qrVersion) $('error').textContent = 'Informe um link http:// ou https:// válido. Links muito extensos devem ser encurtados.'; }
 }
 for (const id of ['min', 'max', 'decimals']) $(id).addEventListener('input', () => { if (busy) return; try { renderWheel(); $('error').textContent = ''; } catch (e) { $('error').textContent = e.message; } });
-$('link').addEventListener('input', () => { ++qrVersion; $('qr').hidden = true; $('qr-caption').textContent = 'ATUALIZANDO QR CODE'; clearTimeout(linkTimer); linkTimer = setTimeout(updateQR, 200); });
+$('link').addEventListener('input', () => { ++qrVersion; $('qr').hidden = true; clearTimeout(linkTimer); linkTimer = setTimeout(updateQR, 200); });
 $('settings').addEventListener('submit', async event => {
   event.preventDefault(); if (busy) return;
   try { renderWheel(); getLink($('link').value.trim()); } catch (e) { $('error').textContent = e.message; return; }
@@ -73,8 +100,8 @@ renderWheel(); updateQR();
 return (<>
 
 <header><a className="brand" href="./"><span className="brand-icon">✦</span> ROLETA<span>CRYPTO</span></a><span className="tag">SORTEIO AO VIVO</span></header>
-<main><section className="stage"><div className="eyebrow">A SORTE ESTÁ NA MESA</div><h1>Um giro.<br /><em>Novas possibilidades.</em></h1><p className="intro">Configure os valores, compartilhe seu link e deixe a roleta decidir.</p>
-<div className="wheel-wrap"><div className="pointer"></div><div className="wheel-frame"><svg className="wheel" viewBox="0 0 600 600" aria-hidden="true"></svg><div className="qr-center"><canvas id="qr" aria-label="QR Code do link informado"></canvas><span id="qr-caption">ESCANEIE O QR CODE</span></div></div></div>
+<main><section className="stage"><h1>Um giro.<br /><em>Ganhe um Brinde.</em></h1>
+<div className="wheel-wrap"><div className="pointer"></div><div className="wheel-frame"><svg className="wheel" viewBox="0 0 600 600" aria-hidden="true"></svg><div className="qr-center"><canvas id="qr" aria-label="QR Code do link informado"></canvas></div></div></div>
 <div className="wheel-note"><span className="dot"></span> QR Code fixo para escanear durante o giro</div></section>
 <aside><div className="panel"><div className="eyebrow">PERSONALIZE SUA RODADA</div><h2>Prepare o sorteio</h2><form id="settings"><div className="field-row"><label>Valor mínimo<input id="min" type="number" min="0" step="any" defaultValue="1" required /></label><label>Valor máximo<input id="max" type="number" min="0" step="any" defaultValue="100" required /></label></div><label>Casas decimais<select id="decimals"><option value="0">0 · valores inteiros</option><option value="2">2 · centésimos</option><option value="4">4 · frações de cripto</option></select></label><label>Link do QR Code<input id="link" type="url" defaultValue="https://hubagentic.space" placeholder="https://seusite.com" required /></label><p className="hint">O código é atualizado automaticamente e abre exatamente este link.</p><p id="error" role="alert"></p><button id="spin" type="submit"><span>GIRAR ROLETA</span><span>↗</span></button></form>
 <div className="result" aria-live="polite" aria-atomic="true"><span id="result-label">PRONTO PARA A PRIMEIRA RODADA</span><strong id="result">—</strong><small id="range-label">Entre 1 e 100, incluindo os extremos</small></div></div>
